@@ -11,17 +11,26 @@
 3. **See today's tasks** - View the generated daily plan and task schedule.
 
 **UML Design:**
-The initial design includes five main classes:
-1. **Pet** - Stores pet information (name, type, age). Responsible for representing the pet being cared for.
-2. **Owner** - Stores owner information (name, available time per day, preferences). Responsible for defining constraints on scheduling.
-3. **Task** - Represents a care task with properties (name, duration, priority, task type). Responsible for encapsulating individual care activities.
-4. **Scheduler** - Contains the scheduling algorithm. Responsible for taking a list of tasks and constraints, then generating an optimized daily plan based on priority and available time.
-5. **DailyPlan** - Represents the final schedule with ordered tasks and timing. Responsible for storing and displaying the generated plan with explanations.
+The initial design includes four main classes:
+
+1. **Pet** (dataclass) - Stores pet information (name, type, age). Provides methods to get and update pet details.
+
+2. **Owner** (dataclass) - Stores owner information and defines scheduling constraints through available_time and preferences. The available_time determines the daily time budget for the scheduler.
+
+3. **Task** (dataclass) - Represents individual care tasks with name, duration, priority, and task_type. Each task knows its own duration and priority, which the scheduler uses to make decisions.
+
+4. **Scheduler** - Manages a list of tasks and implements the scheduling algorithm. It uses the owner's time constraints to generate a daily schedule by prioritizing tasks that fit within the available time.
+
+
+I used dataclasses for Pet, Owner, and Task because they primarily hold data. Scheduler is a regular class because it contains the core scheduling logic and algorithm.
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+Yes. During implementation, I realized the original design was missing some important relationships between classes.
+
+I updated `Owner` to store a list of pets so the system clearly represents who owns which pets. I also updated `Task` to include a `pet_name`, which connects each task to the correct pet. This makes the design more realistic and avoids leaving `Pet` disconnected from the scheduling logic.
+
+I changed task removal to use a `task_id` instead of the task name, because names are not always unique. These changes made the system easier to organize and reduced ambiguity in the logic.
 
 ---
 
