@@ -43,8 +43,9 @@ I changed task removal to use a `task_id` instead of the task name, because name
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+One tradeoff my scheduler makes is that it uses a simple approach instead of finding the perfect schedule. It picks the most important tasks that fit in the available time.
+
+This is reasonable because the app is supposed to help pet owners make quick daily plans. A simple scheduler is easier to understand and works well for this project.
 
 ---
 

@@ -22,6 +22,15 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Smarter Scheduling
+
+PawPal+ includes a few smarter scheduling features:
+
+- Tasks can be sorted by scheduled time in `HH:MM` format.
+- Tasks can be filtered by pet name or completion status.
+- Daily and weekly tasks automatically create the next occurrence when completed.
+- The scheduler detects overlapping timed tasks and returns warning messages instead of crashing.
+
 ## Getting started
 
 ### Setup

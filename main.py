@@ -7,9 +7,25 @@ def main() -> None:
     maomao = Pet(name="Maomao", type="cat", age=3)
     luna = Pet(name="Luna", type="cat", age=5)
 
-    maomao.add_task(Task(description="Morning walk", duration=20, frequency="daily", priority=3))
+    maomao.add_task(
+        Task(
+            description="Morning walk",
+            duration=20,
+            frequency="daily",
+            priority=3,
+            scheduled_time="08:00",
+        )
+    )
     maomao.add_task(Task(description="Breakfast", duration=10, frequency="daily", priority=2))
-    luna.add_task(Task(description="Litter cleaning", duration=15, frequency="daily", priority=2))
+    luna.add_task(
+        Task(
+            description="Litter cleaning",
+            duration=15,
+            frequency="daily",
+            priority=2,
+            scheduled_time="08:00",
+        )
+    )
     luna.add_task(Task(description="Play time", duration=25, frequency="daily", priority=1))
 
     owner.add_pet(maomao)
@@ -17,6 +33,12 @@ def main() -> None:
 
     scheduler = Scheduler(owner)
     plan = scheduler.generate_plan()
+
+    if plan["warnings"]:
+        print("Warnings:")
+        for warning in plan["warnings"]:
+            print(warning)
+        print()
 
     print("Today's Schedule")
     print("================")

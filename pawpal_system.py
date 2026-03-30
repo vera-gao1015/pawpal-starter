@@ -6,6 +6,7 @@ This module contains all the core classes for the pet care scheduling system.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from typing import Dict, List
 
 
@@ -17,6 +18,8 @@ class Task:
     frequency: str
     completed: bool = False
     priority: int = 1
+    scheduled_time: str = ""
+    due_date: date | None = None
 
     def get_duration(self) -> int:
         """Return the task duration in minutes."""
@@ -112,15 +115,103 @@ class Scheduler:
             if pet.name != pet_name:
                 continue
             for task in pet.tasks:
-                if task.description == description:
+                if task.description == description and not task.completed:
                     task.mark_complete()
+                    if task.frequency in {"daily", "weekly"}:
+                        pet.add_task(self._create_next_occurrence(task))
                     return True
         return False
+
+    def sort_by_time(self, tasks: List[Task]) -> List[Task]:
+        """Return a new task list ordered by scheduled_time in HH:MM format.
+
+        Tasks without a scheduled time are placed at the end of the list.
+        """
+        return sorted(tasks, key=lambda task: task.scheduled_time or "99:99")
+
+    def filter_tasks(
+        self,
+        completed: bool | None = None,
+        pet_name: str | None = None,
+    ) -> List[Dict]:
+        """Return task records that match an optional status and/or pet filter.
+
+        If `completed` is provided, only tasks with that completion state are
+        included. If `pet_name` is provided, only tasks for that pet are
+        returned.
+        """
+        filtered_tasks: List[Dict] = []
+
+        for pet in self.owner.pets:
+            if pet_name and pet.name != pet_name:
+                continue
+            for task in pet.tasks:
+                if completed is not None and task.completed != completed:
+                    continue
+                filtered_tasks.append(
+                    {
+                        "pet_name": pet.name,
+                        "description": task.description,
+                        "duration": task.duration,
+                        "frequency": task.frequency,
+                        "priority": task.priority,
+                        "scheduled_time": task.scheduled_time,
+                        "completed": task.completed,
+                    }
+                )
+
+        return filtered_tasks
+
+    def detect_conflicts(self) -> List[str]:
+        """Return warning strings for timed tasks that overlap.
+
+        The algorithm sorts timed tasks once, then scans from left to right and
+        compares each task with the current active task to detect simple
+        overlaps without stopping the program.
+        """
+        warnings: List[str] = []
+        timed_tasks = []
+
+        for pet in self.owner.pets:
+            for task in pet.tasks:
+                if task.completed or not task.scheduled_time:
+                    continue
+                timed_tasks.append(
+                    {
+                        "pet_name": pet.name,
+                        "description": task.description,
+                        "scheduled_time": task.scheduled_time,
+                        "duration": task.duration,
+                    }
+                )
+
+        timed_tasks.sort(key=lambda task: task["scheduled_time"])
+        previous_task = None
+        previous_end = None
+
+        for task in timed_tasks:
+            task_start = self._time_to_minutes(task["scheduled_time"])
+            task_end = self._end_minutes(task["scheduled_time"], task["duration"])
+            if task_start is None or task_end is None:
+                continue
+            if previous_task is not None and previous_end is not None and task_start < previous_end:
+                warnings.append(
+                    f"Warning: {previous_task['description']} for {previous_task['pet_name']} overlaps with "
+                    f"{task['description']} for {task['pet_name']} at {task['scheduled_time']}."
+                )
+            if previous_end is None or task_end > previous_end:
+                previous_task = task
+                previous_end = task_end
+
+        return warnings
 
     def generate_plan(self) -> Dict:
         """Generate a daily schedule from the owner's tasks."""
         tasks = [task for task in self.get_all_tasks() if not task.completed]
-        sorted_tasks = sorted(tasks, key=lambda task: (-task.priority, task.duration))
+        sorted_tasks = sorted(
+            self.sort_by_time(tasks),
+            key=lambda task: (-task.priority, task.duration, task.scheduled_time or "99:99"),
+        )
         scheduled_tasks: List[Dict] = []
         unscheduled_tasks: List[Dict] = []
         used_time = 0
@@ -133,6 +224,7 @@ class Scheduler:
                 "duration": task.duration,
                 "frequency": task.frequency,
                 "priority": task.priority,
+                "scheduled_time": task.scheduled_time,
             }
             if used_time + task.duration <= self.owner.available_time:
                 scheduled_tasks.append(task_data)
@@ -155,6 +247,7 @@ class Scheduler:
             "total_duration": used_time,
             "explanation": explanation,
             "unscheduled_tasks": unscheduled_tasks,
+            "warnings": self.detect_conflicts(),
         }
 
     def _find_pet_for_task(self, target_task: Task) -> str:
@@ -176,9 +269,10 @@ class Scheduler:
             f"Pets: {', '.join(plan['pet_names']) if plan['pet_names'] else 'none'}",
         ]
         for task in plan["scheduled_tasks"]:
+            time_label = f", at {task['scheduled_time']}" if task["scheduled_time"] else ""
             lines.append(
                 f"- {task['description']} for {task['pet_name']} "
-                f"({task['duration']} min, priority {task['priority']})"
+                f"({task['duration']} min, priority {task['priority']}{time_label})"
             )
         lines.append(f"Total scheduled time: {plan['total_duration']} minutes")
         return "\n".join(lines)
@@ -186,3 +280,39 @@ class Scheduler:
     def get_explanation(self) -> str:
         """Return the scheduling explanation."""
         return self.generate_plan()["explanation"]
+
+    def _create_next_occurrence(self, task: Task) -> Task:
+        """Create the next pending copy of a recurring task.
+
+        Daily tasks get a due date of today plus one day, and weekly tasks get
+        a due date of today plus seven days.
+        """
+        next_due_date = None
+        if task.frequency == "daily":
+            next_due_date = date.today() + timedelta(days=1)
+        elif task.frequency == "weekly":
+            next_due_date = date.today() + timedelta(days=7)
+
+        return Task(
+            description=task.description,
+            duration=task.duration,
+            frequency=task.frequency,
+            priority=task.priority,
+            scheduled_time=task.scheduled_time,
+            due_date=next_due_date,
+        )
+
+    def _time_to_minutes(self, time_value: str) -> int | None:
+        """Convert an HH:MM string into total minutes after midnight."""
+        try:
+            parsed = datetime.strptime(time_value, "%H:%M")
+        except ValueError:
+            return None
+        return parsed.hour * 60 + parsed.minute
+
+    def _end_minutes(self, time_value: str, duration: int) -> int | None:
+        """Return a task's ending minute based on start time plus duration."""
+        start_minutes = self._time_to_minutes(time_value)
+        if start_minutes is None:
+            return None
+        return start_minutes + duration
