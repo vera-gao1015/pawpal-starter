@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Dict, List
+from typing import List
+from uuid import uuid4
 
 
 @dataclass
@@ -20,6 +21,7 @@ class Task:
     priority: int = 1
     scheduled_time: str = ""
     due_date: date | None = None
+    task_id: str = field(default_factory=lambda: str(uuid4()), init=False)
 
     def get_duration(self) -> int:
         """Return the task duration in minutes."""
@@ -57,10 +59,9 @@ class Pet:
 
 @dataclass
 class Owner:
-    """Represents the pet owner with time constraints and preferences."""
+    """Represents the pet owner with time constraints."""
     name: str
     available_time: int
-    preferences: Dict = field(default_factory=dict)
     pets: List[Pet] = field(default_factory=list)
 
     def get_available_time(self) -> int:
@@ -75,9 +76,20 @@ class Owner:
             f"{pet_names}."
         )
 
-    def add_pet(self, pet: Pet) -> None:
-        """Add a pet to this owner."""
+    def add_pet(self, pet: Pet) -> bool:
+        """Add a pet to this owner if the name is unique."""
+        if any(existing_pet.name.lower() == pet.name.lower() for existing_pet in self.pets):
+            return False
         self.pets.append(pet)
+        return True
+
+    def remove_pet(self, pet_name: str) -> bool:
+        """Remove a pet by name."""
+        for index, pet in enumerate(self.pets):
+            if pet.name == pet_name:
+                del self.pets[index]
+                return True
+        return False
 
     def get_all_tasks(self) -> List[Task]:
         """Return tasks from all of the owner's pets."""
@@ -98,24 +110,24 @@ class Scheduler:
         """Return all tasks from the owner's pets."""
         return self.owner.get_all_tasks()
 
-    def remove_task(self, description: str, pet_name: str) -> bool:
-        """Remove a task from a specific pet."""
+    def remove_task(self, task_id: str, pet_name: str) -> bool:
+        """Remove a task from a specific pet by task ID."""
         for pet in self.owner.pets:
             if pet.name != pet_name:
                 continue
             for index, task in enumerate(pet.tasks):
-                if task.description == description:
+                if task.task_id == task_id:
                     del pet.tasks[index]
                     return True
         return False
 
-    def mark_task_complete(self, description: str, pet_name: str) -> bool:
-        """Mark a task complete for a specific pet."""
+    def mark_task_complete(self, task_id: str, pet_name: str) -> bool:
+        """Mark a task complete for a specific pet by task ID."""
         for pet in self.owner.pets:
             if pet.name != pet_name:
                 continue
             for task in pet.tasks:
-                if task.description == description and not task.completed:
+                if task.task_id == task_id and not task.completed:
                     task.mark_complete()
                     if task.frequency in {"daily", "weekly"}:
                         pet.add_task(self._create_next_occurrence(task))
@@ -150,12 +162,14 @@ class Scheduler:
                     continue
                 filtered_tasks.append(
                     {
+                        "task_id": task.task_id,
                         "pet_name": pet.name,
                         "description": task.description,
                         "duration": task.duration,
                         "frequency": task.frequency,
                         "priority": task.priority,
                         "scheduled_time": task.scheduled_time,
+                        "due_date": task.due_date.isoformat() if task.due_date else "",
                         "completed": task.completed,
                     }
                 )
@@ -178,6 +192,7 @@ class Scheduler:
                     continue
                 timed_tasks.append(
                     {
+                        "task_id": task.task_id,
                         "pet_name": pet.name,
                         "description": task.description,
                         "scheduled_time": task.scheduled_time,
@@ -219,12 +234,14 @@ class Scheduler:
         for task in sorted_tasks:
             pet_name = self._find_pet_for_task(task)
             task_data = {
+                "task_id": task.task_id,
                 "pet_name": pet_name,
                 "description": task.description,
                 "duration": task.duration,
                 "frequency": task.frequency,
                 "priority": task.priority,
                 "scheduled_time": task.scheduled_time,
+                "due_date": task.due_date.isoformat() if task.due_date else "",
             }
             if used_time + task.duration <= self.owner.available_time:
                 scheduled_tasks.append(task_data)
